@@ -1,3 +1,7 @@
 <Solution>
+  <Folder Name="/Solution Items/">
+    <File Path="../../../Downloads/frmLogin.cs" />
+    <File Path="../../../Downloads/frmMainNew.cs" />
+  </Folder>
   <Project Path="WindowsFormsApp1/WindowsFormsApp1.csproj" Id="9ac0443a-9bba-4e84-8fbc-1af738d0b330" />
 </Solution>
