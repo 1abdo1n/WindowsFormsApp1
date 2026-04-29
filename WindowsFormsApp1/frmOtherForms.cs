@@ -236,8 +236,6 @@ namespace WindowsFormsApp1
 			dgv.Columns.Add("manager_name", "Manager");
 			dgv.Columns.Add("employee_count", "Employees");
 			dgv.Columns["employee_count"].FillWeight = 65;
-			dgv.Columns.Add("location", "Location");
-			dgv.Columns["location"].FillWeight = 80;
 
 			Controls.Add(dgv);
 			Controls.Add(statsBar);
@@ -256,7 +254,6 @@ namespace WindowsFormsApp1
                     d.department_id,
                     d.department_name,
                     e.full_name AS manager_name,
-                    d.location,
                     COUNT(emp.employee_id) AS employee_count
                 FROM Department d
                 LEFT JOIN Employee e ON d.manager_id = e.employee_id
@@ -266,7 +263,7 @@ namespace WindowsFormsApp1
                         OR d.department_name LIKE '%' + ? + '%'
                         OR e.full_name LIKE '%' + ? + '%')
                 GROUP BY 
-                    d.department_id, d.department_name, e.full_name, d.location
+                    d.department_id, d.department_name, e.full_name
                 ORDER BY d.department_name";
 
 			try
@@ -294,8 +291,7 @@ namespace WindowsFormsApp1
 							reader["department_id"].ToString(),
 							reader["department_name"].ToString(),
 							reader["manager_name"]?.ToString() ?? "—",
-							empCount,
-							reader["location"]?.ToString() ?? "—"
+							empCount
 						);
 					}
 
@@ -321,9 +317,8 @@ namespace WindowsFormsApp1
 				return;
 
 			string deptName = dgv.CurrentRow.Cells["department_name"].Value?.ToString() ?? "";
-			string location = dgv.CurrentRow.Cells["location"].Value?.ToString() ?? "";
 
-			var dlg = new frmDepartmentAdd(deptId, deptName, location);
+			var dlg = new frmDepartmentAdd(deptId, deptName);
 			if (dlg.ShowDialog() == DialogResult.OK)
 				LoadData();
 		}
@@ -382,31 +377,31 @@ namespace WindowsFormsApp1
 		private readonly int? _deptId;
 		private readonly bool _isEdit;
 
-		private TextBox txtDeptName, txtLocation;
+		private TextBox txtDeptName;
 		private ComboBox cmbManager;
 		private List<KeyValuePair<int, string>> _managerList;
 
-		public frmDepartmentAdd(int? deptId = null, string deptName = "", string location = "")
+		public frmDepartmentAdd(int? deptId = null, string deptName = "")
 		{
 			_deptId = deptId;
 			_isEdit = deptId.HasValue;
 
 			Text = _isEdit ? "Edit Department" : "Add Department";
-			Size = new Size(450, 380);
+			Size = new Size(450, 360);
 			FormBorderStyle = FormBorderStyle.FixedDialog;
 			MaximizeBox = false;
 			StartPosition = FormStartPosition.CenterParent;
 			BackColor = BgPage;
 			Font = new Font("Segoe UI", 9f);
 
-			BuildUI(deptName, location);
+			BuildUI(deptName);
 			LoadManagers();
 
 			if (_isEdit)
 				LoadDepartmentData();
 		}
 
-		private void BuildUI(string deptName, string location)
+		private void BuildUI(string deptName)
 		{
 			var pnl = new Panel
 			{
@@ -448,14 +443,6 @@ namespace WindowsFormsApp1
 				ValueMember = "Key"
 			};
 			AddRow("Manager", cmbManager);
-
-			txtLocation = new TextBox
-			{
-				BorderStyle = BorderStyle.FixedSingle,
-				Font = new Font("Segoe UI", 10f),
-				Text = location
-			};
-			AddRow("Location", txtLocation);
 
 			var btnSave = new Button
 			{
@@ -524,7 +511,7 @@ namespace WindowsFormsApp1
 			try
 			{
 				using (var con = new OdbcConnection(Global.ConnStr))
-				using (var cmd = new OdbcCommand("SELECT department_name, manager_id, location FROM Department WHERE department_id = ?", con))
+				using (var cmd = new OdbcCommand("SELECT department_name, manager_id FROM Department WHERE department_id = ?", con))
 				{
 					cmd.Parameters.AddWithValue("?", _deptId.Value);
 					con.Open();
@@ -544,7 +531,6 @@ namespace WindowsFormsApp1
 								}
 							}
 						}
-						txtLocation.Text = reader["location"]?.ToString() ?? "";
 					}
 				}
 			}
@@ -577,15 +563,13 @@ namespace WindowsFormsApp1
 						string sql = @"
                             UPDATE Department SET
                                 department_name = ?,
-                                manager_id = ?,
-                                location = ?
+                                manager_id = ?
                             WHERE department_id = ?";
 
 						using (var cmd = new OdbcCommand(sql, con))
 						{
 							cmd.Parameters.AddWithValue("?", txtDeptName.Text);
 							cmd.Parameters.AddWithValue("?", managerId.HasValue ? (object)managerId.Value : DBNull.Value);
-							cmd.Parameters.AddWithValue("?", string.IsNullOrEmpty(txtLocation.Text) ? (object)DBNull.Value : txtLocation.Text);
 							cmd.Parameters.AddWithValue("?", _deptId.Value);
 							cmd.ExecuteNonQuery();
 						}
@@ -604,14 +588,13 @@ namespace WindowsFormsApp1
 						}
 
 						string sql = @"
-                            INSERT INTO Department (department_name, manager_id, location)
-                            VALUES (?, ?, ?)";
+                            INSERT INTO Department (department_name, manager_id)
+                            VALUES (?, ?)";
 
 						using (var cmd = new OdbcCommand(sql, con))
 						{
 							cmd.Parameters.AddWithValue("?", txtDeptName.Text);
 							cmd.Parameters.AddWithValue("?", managerId.HasValue ? (object)managerId.Value : DBNull.Value);
-							cmd.Parameters.AddWithValue("?", string.IsNullOrEmpty(txtLocation.Text) ? (object)DBNull.Value : txtLocation.Text);
 							cmd.ExecuteNonQuery();
 						}
 						MessageBox.Show("Department added successfully!", "Success", MessageBoxButtons.OK, MessageBoxIcon.Information);
@@ -916,6 +899,7 @@ namespace WindowsFormsApp1
 			string search = (txtSearch.Text == "Search assets...") ? "" : txtSearch.Text.Trim();
 			string statusFilter = cmbStatusFilter.SelectedItem?.ToString() ?? "All";
 
+			// Changed FROM assets TO Asset (singular)
 			string sql = @"
                 SELECT 
                     a.asset_id,
@@ -924,7 +908,7 @@ namespace WindowsFormsApp1
                     e.full_name AS employee_name,
                     CONVERT(VARCHAR, a.assigned_date, 103) AS assigned_date_display,
                     a.status
-                FROM assets a
+                FROM Asset a
                 LEFT JOIN Employee e ON a.employee_id = e.employee_id
                 WHERE 
                     (? = 'All' OR a.status = ?)
@@ -1015,7 +999,7 @@ namespace WindowsFormsApp1
 			try
 			{
 				using (var con = new OdbcConnection(Global.ConnStr))
-				using (var cmd = new OdbcCommand("DELETE FROM assets WHERE asset_id = ?", con))
+				using (var cmd = new OdbcCommand("DELETE FROM Asset WHERE asset_id = ?", con))
 				{
 					cmd.Parameters.AddWithValue("?", assetId);
 					con.Open();
@@ -1208,7 +1192,7 @@ namespace WindowsFormsApp1
 			try
 			{
 				using (var con = new OdbcConnection(Global.ConnStr))
-				using (var cmd = new OdbcCommand("SELECT asset_name, asset_type, employee_id, assigned_date, status FROM assets WHERE asset_id = ?", con))
+				using (var cmd = new OdbcCommand("SELECT asset_name, asset_type, employee_id, assigned_date, status FROM Asset WHERE asset_id = ?", con))
 				{
 					cmd.Parameters.AddWithValue("?", _assetId.Value);
 					con.Open();
@@ -1273,7 +1257,7 @@ namespace WindowsFormsApp1
 					if (_isEdit)
 					{
 						string sql = @"
-                            UPDATE assets SET
+                            UPDATE Asset SET
                                 asset_name = ?,
                                 asset_type = ?,
                                 employee_id = ?,
@@ -1296,7 +1280,7 @@ namespace WindowsFormsApp1
 					else
 					{
 						string sql = @"
-                            INSERT INTO assets (asset_name, asset_type, employee_id, assigned_date, status)
+                            INSERT INTO Asset (asset_name, asset_type, employee_id, assigned_date, status)
                             VALUES (?, ?, ?, ?, ?)";
 
 						using (var cmd = new OdbcCommand(sql, con))
@@ -1419,7 +1403,7 @@ namespace WindowsFormsApp1
 					new string[] { "Attendance Report", "Monthly attendance summary", "check_in, check_out, work_hours" },
 					new string[] { "Payroll Report", "Salary breakdown", "base_salary, allowances, net" },
 					new string[] { "Leave Report", "Leave requests", "leave_type, dates, status" },
-					new string[] { "Contract Report", "Contract status", "contract_type, start_date, end_date" },
+					new string[] { "Contract Report", "Contract status", "contract_id, start_date, end_date" },
 					new string[] { "Asset Report", "Asset inventory", "asset_name, type, assigned_to" },
 					new string[] { "Department Report", "Dept headcount", "department_name, manager, count" },
 					new string[] { "Performance Report", "Evaluation scores", "technical, attendance, safety, rating" }
@@ -1442,7 +1426,7 @@ namespace WindowsFormsApp1
 					new string[] { "My Attendance", "My attendance record", "date, check_in, check_out, status" },
 					new string[] { "My Leave", "My leave requests", "leave_type, from_date, to_date" },
 					new string[] { "My Performance", "My evaluation scores", "technical, attendance, safety" },
-					new string[] { "My Contract", "My employment contract", "contract_type, start_date, end_date" }
+					new string[] { "My Contract", "My employment contract", "contract_id, start_date, end_date" }
 				};
 			}
 

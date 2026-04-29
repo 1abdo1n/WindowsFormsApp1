@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Data.Odbc;
 using System.Drawing;
 using System.Windows.Forms;
@@ -263,8 +264,8 @@ namespace WindowsFormsApp1
 			dgv.Columns["start_date"].FillWeight = 80;
 			dgv.Columns.Add("end_date", "End Date");
 			dgv.Columns["end_date"].FillWeight = 80;
-			dgv.Columns.Add("status_display", "Status");
-			dgv.Columns["status_display"].FillWeight = 70;
+			dgv.Columns.Add("status", "Status");
+			dgv.Columns["status"].FillWeight = 70;
 
 			dgv.CellFormatting += Dgv_CellFormatting;
 
@@ -281,6 +282,7 @@ namespace WindowsFormsApp1
 			string search = (txtSearch.Text == "Search by employee or contract #...") ? "" : txtSearch.Text.Trim();
 			string statusFilter = cmbStatus.SelectedItem?.ToString() ?? "All";
 
+			// Modified query: join through Employee.contract_id instead of Contract.employee_id
 			string sql = @"
                 SELECT 
                     c.contract_id,
@@ -294,8 +296,8 @@ namespace WindowsFormsApp1
                         WHEN c.status = 'Active' AND c.end_date <= DATEADD(day, 30, GETDATE()) THEN 'Expiring Soon'
                         ELSE c.status
                     END AS status_display
-                FROM Contracts c
-                LEFT JOIN Employee e ON c.employee_id = e.employee_id
+                FROM Contract c
+                INNER JOIN Employee e ON e.contract_id = c.contract_id
                 WHERE 
                     (? = 'All' OR 
                         CASE
@@ -388,7 +390,7 @@ namespace WindowsFormsApp1
 			try
 			{
 				using (var con = new OdbcConnection(Global.ConnStr))
-				using (var cmd = new OdbcCommand("DELETE FROM Contracts WHERE contract_id = ?", con))
+				using (var cmd = new OdbcCommand("DELETE FROM Contract WHERE contract_id = ?", con))
 				{
 					cmd.Parameters.AddWithValue("?", contractId);
 					con.Open();
@@ -415,10 +417,10 @@ namespace WindowsFormsApp1
 		{
 			if (e.RowIndex < 0) return;
 			var row = dgv.Rows[e.RowIndex];
-			if (row.Cells["status_display"].Value == null) return;
+			if (row.Cells["status"].Value == null) return;
 			if (row.Selected) return;
 
-			string status = row.Cells["status_display"].Value.ToString();
+			string status = row.Cells["status"].Value.ToString();
 
 			if (status == "Active")
 				row.DefaultCellStyle.BackColor = Color.FromArgb(240, 253, 244);
@@ -597,14 +599,14 @@ namespace WindowsFormsApp1
 				{
 					con.Open();
 					var reader = cmd.ExecuteReader();
-					var items = new System.Collections.Generic.List<(int Id, string Name)>();
+					var items = new System.Collections.Generic.List<KeyValuePair<int, string>>();
 					while (reader.Read())
 					{
-						items.Add((Convert.ToInt32(reader["employee_id"]), reader["full_name"].ToString()));
+						items.Add(new KeyValuePair<int, string>(Convert.ToInt32(reader["employee_id"]), reader["full_name"].ToString()));
 					}
 					cmbEmployee.DataSource = items;
-					cmbEmployee.DisplayMember = "Name";
-					cmbEmployee.ValueMember = "Id";
+					cmbEmployee.DisplayMember = "Value";
+					cmbEmployee.ValueMember = "Key";
 					cmbEmployee.SelectedIndex = -1;
 				}
 			}
@@ -619,25 +621,13 @@ namespace WindowsFormsApp1
 			try
 			{
 				using (var con = new OdbcConnection(Global.ConnStr))
-				using (var cmd = new OdbcCommand("SELECT employee_id, contract_type, start_date, end_date, status, notes FROM Contracts WHERE contract_id = ?", con))
+				using (var cmd = new OdbcCommand("SELECT contract_type, start_date, end_date, status, notes FROM Contract WHERE contract_id = ?", con))
 				{
 					cmd.Parameters.AddWithValue("?", _contractId.Value);
 					con.Open();
 					var reader = cmd.ExecuteReader();
 					if (reader.Read())
 					{
-						if (reader["employee_id"] != DBNull.Value)
-						{
-							int empId = Convert.ToInt32(reader["employee_id"]);
-							foreach (var item in (System.Collections.Generic.List<(int Id, string Name)>)cmbEmployee.DataSource)
-							{
-								if (item.Id == empId)
-								{
-									cmbEmployee.SelectedItem = item;
-									break;
-								}
-							}
-						}
 						cmbContractType.SelectedItem = reader["contract_type"]?.ToString();
 						dtpStart.Value = reader["start_date"] != DBNull.Value ? Convert.ToDateTime(reader["start_date"]) : DateTime.Today;
 						dtpEnd.Value = reader["end_date"] != DBNull.Value ? Convert.ToDateTime(reader["end_date"]) : DateTime.Today.AddYears(1);
@@ -687,8 +677,7 @@ namespace WindowsFormsApp1
 					if (_isEdit)
 					{
 						string sql = @"
-                            UPDATE Contracts SET
-                                employee_id = ?,
+                            UPDATE Contract SET
                                 contract_type = ?,
                                 start_date = ?,
                                 end_date = ?,
@@ -698,7 +687,6 @@ namespace WindowsFormsApp1
 
 						using (var cmd = new OdbcCommand(sql, con))
 						{
-							cmd.Parameters.AddWithValue("?", employeeId);
 							cmd.Parameters.AddWithValue("?", contractType);
 							cmd.Parameters.AddWithValue("?", startDate);
 							cmd.Parameters.AddWithValue("?", endDate);
@@ -711,31 +699,43 @@ namespace WindowsFormsApp1
 					}
 					else
 					{
-						// Check for duplicate active contract
-						using (var chk = new OdbcCommand("SELECT COUNT(1) FROM Contracts WHERE employee_id = ? AND status = 'Active'", con))
+						// Check if employee already has a contract
+						using (var chk = new OdbcCommand("SELECT contract_id FROM Employee WHERE employee_id = ?", con))
 						{
 							chk.Parameters.AddWithValue("?", employeeId);
-							if (Convert.ToInt32(chk.ExecuteScalar()) > 0)
+							var existingContractId = chk.ExecuteScalar();
+							if (existingContractId != null && existingContractId != DBNull.Value)
 							{
-								MessageBox.Show("This employee already has an active contract.", "Duplicate", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+								MessageBox.Show("This employee already has a contract assigned.", "Duplicate", MessageBoxButtons.OK, MessageBoxIcon.Warning);
 								return;
 							}
 						}
 
+						// Insert new contract
 						string sql = @"
-                            INSERT INTO Contracts (employee_id, contract_type, start_date, end_date, status, notes)
-                            VALUES (?, ?, ?, ?, ?, ?)";
+                            INSERT INTO Contract (contract_type, start_date, end_date, status, notes)
+                            VALUES (?, ?, ?, ?, ?);
+                            SELECT SCOPE_IDENTITY()";
 
+						int newContractId;
 						using (var cmd = new OdbcCommand(sql, con))
 						{
-							cmd.Parameters.AddWithValue("?", employeeId);
 							cmd.Parameters.AddWithValue("?", contractType);
 							cmd.Parameters.AddWithValue("?", startDate);
 							cmd.Parameters.AddWithValue("?", endDate);
 							cmd.Parameters.AddWithValue("?", status);
 							cmd.Parameters.AddWithValue("?", string.IsNullOrEmpty(txtNotes.Text) ? (object)DBNull.Value : txtNotes.Text);
-							cmd.ExecuteNonQuery();
+							newContractId = Convert.ToInt32(cmd.ExecuteScalar());
 						}
+
+						// Update employee with the new contract_id
+						using (var cmd2 = new OdbcCommand("UPDATE Employee SET contract_id = ? WHERE employee_id = ?", con))
+						{
+							cmd2.Parameters.AddWithValue("?", newContractId);
+							cmd2.Parameters.AddWithValue("?", employeeId);
+							cmd2.ExecuteNonQuery();
+						}
+
 						MessageBox.Show("Contract created successfully!", "Success", MessageBoxButtons.OK, MessageBoxIcon.Information);
 					}
 				}

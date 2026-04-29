@@ -301,8 +301,6 @@ namespace WindowsFormsApp1
 			dgv.Columns["approval_status"].FillWeight = 70;
 			dgv.Columns.Add("approved_by_name", "Approved By");
 			dgv.Columns["approved_by_name"].FillWeight = 80;
-			dgv.Columns.Add("notes", "Notes");
-			dgv.Columns["notes"].FillWeight = 100;
 
 			dgv.CellFormatting += Dgv_CellFormatting;
 
@@ -329,7 +327,6 @@ namespace WindowsFormsApp1
                     CONVERT(VARCHAR, l.end_date, 103) AS end_date_display,
                     DATEDIFF(day, l.start_date, l.end_date) + 1 AS days,
                     l.approval_status,
-                    l.notes,
                     apr.full_name AS approved_by_name
                 FROM [Leave] l
                 LEFT JOIN Employee e ON l.employee_id = e.employee_id
@@ -381,8 +378,7 @@ namespace WindowsFormsApp1
 							reader["end_date_display"].ToString(),
 							reader["days"].ToString(),
 							status,
-							reader["approved_by_name"]?.ToString() ?? "—",
-							reader["notes"]?.ToString() ?? ""
+							reader["approved_by_name"]?.ToString() ?? "—"
 						);
 					}
 
@@ -512,7 +508,7 @@ namespace WindowsFormsApp1
 	}
 
 	// ============================================================
-	//  ADD LEAVE REQUEST FORM
+	//  ADD LEAVE REQUEST FORM (WITHOUT NOTES)
 	// ============================================================
 	public class frmLeaveAdd : Form
 	{
@@ -526,7 +522,6 @@ namespace WindowsFormsApp1
 		private TextBox txtEmpId;
 		private ComboBox cmbLeaveType;
 		private DateTimePicker dtpStart, dtpEnd;
-		private TextBox txtNotes;
 		private Label lblDaysCalc;
 
 		public frmLeaveAdd(string employeeId = "")
@@ -534,7 +529,7 @@ namespace WindowsFormsApp1
 			_employeeId = employeeId;
 
 			Text = "New Leave Request";
-			Size = new Size(450, 520);
+			Size = new Size(450, 460);
 			FormBorderStyle = FormBorderStyle.FixedDialog;
 			MaximizeBox = false;
 			StartPosition = FormStartPosition.CenterParent;
@@ -612,26 +607,6 @@ namespace WindowsFormsApp1
 			};
 			pnl.Controls.Add(lblDaysCalc);
 			y += 24;
-
-			// Notes
-			pnl.Controls.Add(new Label
-			{
-				Text = "Notes",
-				Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
-				ForeColor = Color.FromArgb(55, 65, 81),
-				AutoSize = true,
-				Location = new Point(0, y)
-			});
-			txtNotes = new TextBox
-			{
-				Size = new Size(390, 60),
-				Location = new Point(0, y + 18),
-				Font = new Font("Segoe UI", 10f),
-				BorderStyle = BorderStyle.FixedSingle,
-				Multiline = true
-			};
-			pnl.Controls.Add(txtNotes);
-			y += 80;
 
 			// Buttons
 			var btnSubmit = new Button
@@ -745,8 +720,8 @@ namespace WindowsFormsApp1
 
 					string sql = @"
                         INSERT INTO [Leave] 
-                            (employee_id, leave_type, start_date, end_date, approval_status, notes)
-                        VALUES (?, ?, ?, ?, 'Pending', ?)";
+                            (employee_id, leave_type, start_date, end_date, approval_status)
+                        VALUES (?, ?, ?, ?, 'Pending')";
 
 					using (var cmd = new OdbcCommand(sql, con))
 					{
@@ -754,7 +729,6 @@ namespace WindowsFormsApp1
 						cmd.Parameters.AddWithValue("?", leaveType);
 						cmd.Parameters.AddWithValue("?", dtpStart.Value.Date);
 						cmd.Parameters.AddWithValue("?", dtpEnd.Value.Date);
-						cmd.Parameters.AddWithValue("?", string.IsNullOrEmpty(txtNotes.Text) ? (object)DBNull.Value : txtNotes.Text);
 						cmd.ExecuteNonQuery();
 					}
 

@@ -8,9 +8,6 @@ namespace WindowsFormsApp1
 {
 	public class frmLogin : Form
 	{
-        // Enable temporary debug output for password hashes. Set to false in production.
-		private readonly bool DebugShowHashes = true;
-
 		// ── Colors ────────────────────────────────────────────────
 		private static readonly Color Blue = Color.FromArgb(26, 86, 219);
 		private static readonly Color Green = Color.FromArgb(34, 197, 94);
@@ -133,25 +130,11 @@ namespace WindowsFormsApp1
 					mainForm.Show();
 					Hide();
 				}
-                else
+				else
 				{
 					lblError.Text = "Invalid username or password.";
 					txtPass.Clear();
 					txtPass.Focus();
-					// Debug: show entered hash vs stored hash for the username (do not enable in production)
-					if (DebugShowHashes)
-					{
-						try
-						{
-							string enteredHash = HashPassword(password);
-							string storedHash = GetStoredPasswordHash(username);
-							MessageBox.Show($"Entered hash:\n{enteredHash}\n\nStored hash:\n{storedHash ?? "<no user found>"}", "Debug: Password Hashes", MessageBoxButtons.OK, MessageBoxIcon.Information);
-						}
-						catch (Exception ex)
-						{
-							MessageBox.Show("Debug error: " + ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
-						}
-					}
 				}
 			};
 
@@ -303,7 +286,7 @@ namespace WindowsFormsApp1
                     WHERE u.username = ? AND u.password_hash = ? AND u.is_active = 1", con))
 				{
 					cmd.Parameters.AddWithValue("?", username);
-					cmd.Parameters.AddWithValue("?", HashPassword(password));
+					cmd.Parameters.AddWithValue("?", password);
 
 					con.Open();
 					using (var reader = cmd.ExecuteReader())
@@ -327,24 +310,7 @@ namespace WindowsFormsApp1
 			{
 				MessageBox.Show("Database error: " + ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
 			}
-            return null;
-		}
-
-		// Debug helper to retrieve stored password hash for a username
-		private string GetStoredPasswordHash(string username)
-		{
-			try
-			{
-				using (var con = new OdbcConnection(Global.ConnStr))
-				using (var cmd = new OdbcCommand("SELECT password_hash FROM [User] WHERE username = ?", con))
-				{
-					cmd.Parameters.AddWithValue("?", username);
-					con.Open();
-					var result = cmd.ExecuteScalar();
-					return result == null || result == DBNull.Value ? null : result.ToString();
-				}
-			}
-			catch { return null; }
+			return null;
 		}
 
 		private void LoadDepartments(ComboBox cmb)
@@ -399,8 +365,8 @@ namespace WindowsFormsApp1
 
 					// Insert Employee
 					using (var cmd = new OdbcCommand(@"
-                        INSERT INTO Employee (employee_code, full_name, email, phone_number, department_id, hire_date, status)
-                        VALUES (?, ?, ?, ?, ?, ?, 'Active');
+                        INSERT INTO Employee (employee_code, full_name, email, phone_number, department_id, hire_date)
+                        VALUES (?, ?, ?, ?, ?, ?);
                         SELECT @@IDENTITY", con))
 					{
 						cmd.Parameters.AddWithValue("?", empCode);
@@ -418,7 +384,7 @@ namespace WindowsFormsApp1
                             VALUES (?, ?, ?, 'Employee', 1, ?)", con))
 						{
 							cmd2.Parameters.AddWithValue("?", username);
-							cmd2.Parameters.AddWithValue("?", HashPassword(password));
+							cmd2.Parameters.AddWithValue("?", password);
 							cmd2.Parameters.AddWithValue("?", newEmpId);
 							cmd2.Parameters.AddWithValue("?", DateTime.Now);
 							cmd2.ExecuteNonQuery();
@@ -431,16 +397,6 @@ namespace WindowsFormsApp1
 			catch (Exception ex)
 			{
 				return "Database error: " + ex.Message;
-			}
-		}
-
-		private string HashPassword(string password)
-		{
-			using (var sha = System.Security.Cryptography.SHA256.Create())
-			{
-				byte[] bytes = System.Text.Encoding.UTF8.GetBytes(password);
-				byte[] hash = sha.ComputeHash(bytes);
-				return Convert.ToBase64String(hash);
 			}
 		}
 

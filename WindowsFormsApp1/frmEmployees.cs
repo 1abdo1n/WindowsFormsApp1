@@ -267,8 +267,8 @@ namespace WindowsFormsApp1
 			dgv.Columns.Add("grade", "Grade");
 			dgv.Columns["grade"].FillWeight = 40;
 			dgv.Columns.Add("department_name", "Department");
-			dgv.Columns.Add("contract_type", "Contract");
-			dgv.Columns["contract_type"].FillWeight = 70;
+			dgv.Columns.Add("contract_id", "Contract ID");
+			dgv.Columns["contract_id"].FillWeight = 70;
 			dgv.Columns.Add("status", "Status");
 			dgv.Columns["status"].FillWeight = 55;
 
@@ -298,7 +298,7 @@ namespace WindowsFormsApp1
                     e.job_title,
                     e.grade,
                     d.department_name,
-                    c.contract_type,
+                    c.contract_id,
                     e.status
                 FROM Employee e
                 LEFT JOIN Department d ON e.department_id = d.department_id
@@ -350,7 +350,7 @@ namespace WindowsFormsApp1
 							reader["job_title"]?.ToString() ?? "—",
 							reader["grade"]?.ToString() ?? "—",
 							reader["department_name"]?.ToString() ?? "—",
-							reader["contract_type"]?.ToString() ?? "—",
+							reader["contract_id"]?.ToString() ?? "—",
 							status
 						);
 					}
@@ -545,8 +545,14 @@ namespace WindowsFormsApp1
 			cmbGrade.Items.AddRange(new[] { "A", "B", "C", "D", "E" });
 			AddRow("Grade", cmbGrade);
 
-			cmbContract = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Font = new Font("Segoe UI", 10f), DisplayMember = "contract_type", ValueMember = "contract_id" };
-			AddRow("Contract", cmbContract);
+			cmbContract = new ComboBox
+			{
+				DropDownStyle = ComboBoxStyle.DropDownList,
+				Font = new Font("Segoe UI", 10f),
+				DisplayMember = "contract_id",
+				ValueMember = "contract_id"
+			};
+			AddRow("Contract ID", cmbContract);
 
 			dtpHireDate = new DateTimePicker { Font = new Font("Segoe UI", 10f), Value = DateTime.Today };
 			AddRow("Hire Date", dtpHireDate);
@@ -610,13 +616,13 @@ namespace WindowsFormsApp1
 						cmbDepartment.SelectedIndex = -1;
 					}
 
-					using (var cmd = new OdbcCommand("SELECT contract_id, contract_type FROM Contracts WHERE status = 'Active' ORDER BY contract_type", con))
+					using (var cmd = new OdbcCommand("SELECT contract_id, contract_id FROM Contracts WHERE status = 'Active' ORDER BY contract_id", con))
 					{
 						var reader = cmd.ExecuteReader();
 						var dt = new System.Data.DataTable();
 						dt.Load(reader);
 						cmbContract.DataSource = dt;
-						cmbContract.DisplayMember = "contract_type";
+						cmbContract.DisplayMember = "contract_id";
 						cmbContract.ValueMember = "contract_id";
 						cmbContract.SelectedIndex = -1;
 					}
